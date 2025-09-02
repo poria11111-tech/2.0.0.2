@@ -1179,7 +1179,7 @@ function formatNumber(input) {
 }
 // Initialize Supabase
 const { createClient } = supabase;
-const supabaseClient = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
+const supabaseClient = createClient('https://gfdbqtnflwagtdileryq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmZGJxdG5mbHdhZ3RkaWxlcnlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MDcwODcsImV4cCI6MjA3MjM4MzA4N30.Ysnn_cXMh5B2n03RqbYjGthG5NI9POEaomSJqQ7x4jQ');
 
 // Sign-up function
 async function signUp(email, password) {
