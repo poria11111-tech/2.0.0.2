@@ -9,6 +9,7 @@
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="manifest" href="./manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -78,6 +79,12 @@
     --glass: rgba(255,255,255,0.85);
     --shadow: rgba(20,30,40,0.15);
   }
+  
+  body { font-family: Arial, sans-serif; direction: rtl; text-align: right; margin: 20px; }
+  #loginForm, #addPlayerForm, #userProfile, #playerList { margin: 20px 0; }
+  input, button { margin: 5px; padding: 8px; }
+  button { cursor: pointer; }
+
   * {
     box-sizing: border-box;
     font-family: "Vazirmatn", Arial, sans-serif;
@@ -818,6 +825,20 @@
           </div>
           <div class="card">
             <div class="section-title">
+              <h1>مدیریت باشگاه والیبال</h1>
+<form id="loginForm">
+  <input type="email" id="email" placeholder="ایمیل" required>
+  <input type="password" id="password" placeholder="رمز عبور" required>
+  <button type="submit" onclick="signIn(document.getElementById('email').value, document.getElementById('password').value)">ورود</button>
+  <button type="button" onclick="signUp(document.getElementById('email').value, document.getElementById('password').value)">ثبت‌نام</button>
+</form>
+<div id="userProfile" style="display: none;"></div>
+<form id="addPlayerForm" style="display: none;">
+  <input type="text" id="playerName" placeholder="نام بازیکن" required>
+  <input type="text" id="playerRole" placeholder="نقش (مثل پاسور)" required>
+  <button type="submit">اضافه کردن بازیکن</button>
+</form>
+<div id="playerList"></div>
               <h3>آخرین بازیکنان</h3>
               <button id="addPlayerBtn" class="btn primary">بازیکن جدید</button>
             </div>
@@ -1156,7 +1177,140 @@ function normPersian(s) { return String(s || '').replace(/ي/g, 'ی').replace(/�
 function formatNumber(input) {
   input.value = input.value.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
+// Initialize Supabase
+const { createClient } = supabase;
+const supabaseClient = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
 
+// Sign-up function
+async function signUp(email, password) {
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) {
+    console.error('Sign-up error:', error.message);
+    alert('خطا در ثبت‌نام: ' + error.message);
+  } else {
+    console.log('User signed up:', data.user);
+    localStorage.setItem('userEmail', data.user.email);
+    updateUI(data.user);
+  }
+}
+
+// Sign-in function
+async function signIn(email, password) {
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    console.error('Sign-in error:', error.message);
+    alert('خطا در ورود: ' + error.message);
+  } else {
+    console.log('User signed in:', data.user);
+    localStorage.setItem('userEmail', data.user.email);
+    updateUI(data.user);
+  }
+}
+
+// Sign-out function
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  localStorage.removeItem('userEmail');
+  document.getElementById('userProfile').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('addPlayerForm').style.display = 'none';
+  document.getElementById('playerList').innerHTML = '<p>لطفاً وارد شوید</p>';
+}
+
+// Update UI after sign-in
+function updateUI(user) {
+  if (user) {
+    document.getElementById('userProfile').innerHTML = `
+      <span>${user.email}</span>
+      <button onclick="signOut()">خروج</button>
+    `;
+    document.getElementById('userProfile').style.display = 'block';
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('addPlayerForm').style.display = 'block';
+    loadPlayers();
+  }
+}
+
+// Add player to Supabase
+async function addPlayer(name, role) {
+  const user = supabaseClient.auth.getUser();
+  if ((await user).data.user) {
+    const { data, error } = await supabaseClient
+      .from('players')
+      .insert([{ name, role, user_id: (await user).data.user.id }]);
+    if (error) {
+      console.error('Error adding player:', error.message);
+      alert('خطا در اضافه کردن بازیکن: ' + error.message);
+    } else {
+      console.log('Player added:', data);
+    }
+  } else {
+    alert('لطفاً وارد شوید');
+  }
+}
+
+// Load players from Supabase with real-time subscription
+async function loadPlayers() {
+  const user = supabaseClient.auth.getUser();
+  if ((await user).data.user) {
+    supabaseClient
+      .from('players')
+      .select('*')
+      .eq('user_id', (await user).data.user.id)
+      .on('INSERT', (payload) => {
+        const playerList = document.getElementById('playerList');
+        const player = payload.new;
+        playerList.innerHTML += `<p>${player.name} - ${player.role}</p>`;
+      })
+      .on('UPDATE', (payload) => {
+        loadPlayers(); // Reload to reflect changes
+      })
+      .on('DELETE', (payload) => {
+        loadPlayers(); // Reload to reflect changes
+      })
+      .subscribe();
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('*')
+      .eq('user_id', (await user).data.user.id);
+    if (error) {
+      console.error('Error loading players:', error.message);
+    } else {
+      const playerList = document.getElementById('playerList');
+      playerList.innerHTML = '';
+      data.forEach(player => {
+        playerList.innerHTML += `<p>${player.name} - ${player.role}</p>`;
+      });
+    }
+  } else {
+    document.getElementById('playerList').innerHTML = '<p>لطفاً وارد شوید</p>';
+  }
+}
+
+// Handle form submissions
+document.getElementById('loginForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  signIn(email, password);
+});
+
+document.getElementById('addPlayerForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = document.getElementById('playerName').value;
+  const role = document.getElementById('playerRole').value;
+  addPlayer(name, role);
+  document.getElementById('addPlayerForm').reset();
+});
+
+// Check if user is already signed in
+window.addEventListener('load', async () => {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (user) {
+    localStorage.setItem('userEmail', user.email);
+    updateUI(user);
+  }
+});
 /* Jalali <-> Gregorian Utils */
 function gregorian_to_jalali(gy, gm, gd) {
   gy = parseInt(gy); gm = parseInt(gm); gd = parseInt(gd);
